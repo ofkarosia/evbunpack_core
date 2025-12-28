@@ -1,0 +1,15 @@
+[package]
+name = "evbunpack_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+deku = { version = "0.20.2", default-features = false, features = ["std", "descriptive-errors"] }
+encoding_rs = "0.8.35"
+indexmap = "2.12.1"
+pelite = { version = "0.10.0", features = ["unstable"] }
+aplib = { git = "https://github.com/ofkarosia/aplib", optional = true }
+thiserror = "2.0.17"
+
+[features]
+default = ["aplib"]
