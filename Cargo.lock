@@ -5,9 +5,10 @@ version = 4
 [[package]]
 name = "aplib"
 version = "0.1.0"
-source = "git+https://github.com/ofkarosia/aplib#24d1403ce633278c6c6418c4672f6457142eca13"
+source = "git+https://github.com/ofkarosia/aplib#44ddf5e714381386f62ad4228aaa2afd275bd1d6"
 dependencies = [
  "crc32fast",
+ "thiserror",
 ]
 
 [[package]]
@@ -132,6 +133,7 @@ name = "evbunpack_core"
 version = "0.1.0"
 dependencies = [
  "aplib",
+ "cfg-if",
  "deku",
  "encoding_rs",
  "indexmap",

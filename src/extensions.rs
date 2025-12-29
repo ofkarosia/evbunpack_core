@@ -1,4 +1,4 @@
-use std::{io, iter::Peekable};
+use std::io;
 use pelite::{PeFile, image::IMAGE_DATA_DIRECTORY, pe::Pe, pe32::Pe as Pe32};
 
 pub(crate) trait PeFileExt {
@@ -40,27 +40,3 @@ pub(crate) trait ReadBytesExt: io::Read {
 }
 
 impl<T: io::Read> ReadBytesExt for T {}
-
-pub(crate) struct WithLast<I: Iterator> {
-    peekable: Peekable<I>
-}
-
-impl<I: Iterator> Iterator for WithLast<I> {
-    type Item = (bool, I::Item);
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.peekable.next() {
-            Some(item) => Some((self.peekable.peek().is_none(), item)),
-            None => None,
-        }
-    }
-}
-
-pub(crate) trait IteratorExt: Iterator {
-    fn with_last(self) -> WithLast<Self> where Self: Sized;
-}
-
-impl<I: Iterator> IteratorExt for I {
-    fn with_last(self) -> WithLast<Self> where Self: Sized {
-        WithLast { peekable: self.peekable() }
-    }
-}

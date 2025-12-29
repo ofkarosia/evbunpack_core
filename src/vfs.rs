@@ -1,13 +1,18 @@
+use cfg_if::cfg_if;
 use deku::{DekuContainerRead, DekuError};
 use encoding_rs::UTF_16LE;
 use indexmap::IndexMap;
 use thiserror::Error;
-use std::{borrow::Cow, io::{self, Cursor, Seek}, path::{Path, PathBuf}, result};
+use std::{io::{self, Cursor, Seek}, path::{Path, PathBuf}, result};
 
-#[cfg(feature = "aplib")]
-use aplib::AplibError;
+cfg_if! {
+    if #[cfg(feature = "aplib")] {
+        mod aplib;
+        use ::aplib::AplibError;
+    }
+}
 
-use crate::{evb::{DEFAULT_FOLDER_BYTES, DEFAULT_FOLDER_LEN, EVB_MAGIC, EVB_PACK_HEADER_SIZE, FileNode, LegacyFileNode, ModernFileNode, VFS_HEADER_SIZE, VFS_NODE_TYPE_FILE, VFS_NODE_TYPE_FOLDER, VFS_PADDING, VfsHeader, VfsNode}, extensions::{IteratorExt, ReadBytesExt}};
+use crate::{evb::{DEFAULT_FOLDER_BYTES, DEFAULT_FOLDER_LEN, EVB_MAGIC, EVB_PACK_HEADER_SIZE, FileNode, LegacyFileNode, ModernFileNode, VFS_HEADER_SIZE, VFS_NODE_TYPE_FILE, VFS_NODE_TYPE_FOLDER, VFS_PADDING, VfsHeader, VfsNode}, extensions::ReadBytesExt};
 
 #[derive(Debug, Error)]
 pub enum UnpackerError {
@@ -280,62 +285,5 @@ impl<'r> Unpacker<'r> {
         let size = file_node.stored_size as usize;
 
         Some(&self.slice[offset..offset + size])
-    }
-}
-
-#[cfg(feature = "aplib")]
-use crate::evb::{ChunkHeader, VFS_CHUNK_HEADER_SIZE};
-use aplib::{decompress, decompress_exact};
-
-const DEFAULT_CHUNK_SIZE: usize = 65536;
-
-impl<'r> Unpacker<'r> {
-    pub fn get_decompressed_file_data(&self, node: &VfsNode) -> Result<Option<Vec<u8>>> {
-        // This method has already checked whether node is folder
-        if !node.is_compressed() {
-            return Ok(None)
-        }
-
-        let FileNode { original_size, offset, stored_size } = node.file.unwrap();
-        let mut decompressed = Vec::with_capacity(original_size as usize);
-        let mut reader = Cursor::new(self.slice);
-        reader.set_position(offset);
-
-        let (_, chunk_header) = ChunkHeader::from_reader((&mut reader, 0))?;
-        let chunk_data_start = reader.position() as usize;
-        let chunk_data_size = (chunk_header.size - VFS_CHUNK_HEADER_SIZE) as usize;
-        let chunk_data = &self.slice[chunk_data_start..chunk_data_start + chunk_data_size];
-        reader.seek_relative(chunk_data_size as i64)?;
-
-        let expected_total_chunk_size = stored_size - chunk_header.size;
-        let mut total_chunk_size = 0;
-
-        for (is_last, chunk_size) in chunk_data.chunks_exact(4).step_by(3).map(|e| u32::from_le_bytes(e.try_into().unwrap())).with_last() {
-            let start = reader.position() as usize;
-            reader.seek_relative(chunk_size as i64)?;
-            
-            let data = &self.slice[start..start + chunk_size as usize];
-            let mut decompressed_chunk = if is_last { decompress(data) } else { decompress_exact(data, DEFAULT_CHUNK_SIZE) }?;
-            decompressed.append(&mut decompressed_chunk);
-            total_chunk_size += chunk_size;
-        }
-
-        if total_chunk_size != expected_total_chunk_size {
-            return Err(UnpackerError::SizeMismatch("total chunk size"))
-        }
-
-        if decompressed.len() != original_size as usize {
-            return Err(UnpackerError::SizeMismatch("decompressed size"))
-        }
-
-        Ok(Some(decompressed))
-    }
-
-    pub fn get_file_data(&self, node: &VfsNode) -> Result<Option<Cow<'_, [u8]>>> {
-        if node.is_compressed() {
-            Ok(self.get_decompressed_file_data(node)?.map(Cow::Owned))
-        } else {
-            Ok(self.get_raw_file_data(node).map(Cow::Borrowed))
-        }
     }
 }

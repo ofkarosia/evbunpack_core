@@ -10,6 +10,7 @@ indexmap = "2.12.1"
 pelite = { version = "0.10.0", features = ["unstable"] }
 aplib = { git = "https://github.com/ofkarosia/aplib", optional = true }
 thiserror = "2.0.17"
+cfg-if = "1.0.4"
 
 [features]
 default = ["aplib"]
