@@ -103,7 +103,7 @@ impl<'r> RestorePeContext<'r, EmptyHeader> {
             .by_name(".enigma1")
             .ok_or(RestorePeError::Enigma1NotFound)?;
         let raw_data = &self.slice[enigma1.PointerToRawData as usize..];
-        let header_start = variant.header_start_offset(self.is_x64);
+        let header_start = variant.header_start_offset(pe.is_x64());
         let (_, mut enigma_header) = Enigma1Header::from_bytes((
             &raw_data[header_start..header_start + ENIGMA1_HEADER_SIZE],
             0,
