@@ -1,5 +1,5 @@
 use std::{borrow::Cow, io::{Cursor, Seek}};
-use aplib::decompress_to;
+use aplib::{decompress_exact, decompress_to};
 use deku::DekuContainerRead;
 
 use crate::{evb::{ChunkHeader, FileNode, VFS_CHUNK_HEADER_SIZE, VfsNode}, vfs::{Result, Unpacker, UnpackerError}};
@@ -14,7 +14,6 @@ impl<'r> Unpacker<'r> {
         }
 
         let FileNode { original_size, offset, stored_size } = node.file.unwrap();
-        let mut decompressed = Vec::with_capacity(original_size as usize);
         let mut reader = Cursor::new(self.slice);
         reader.set_position(offset);
 
@@ -30,10 +29,11 @@ impl<'r> Unpacker<'r> {
         if chunk_data.len() == 4 {
             let start = reader.position() as usize;
             let size = u32::from_le_bytes(chunk_data.try_into().unwrap());
-            decompress_to(&self.slice[start..start + size as usize], &mut decompressed)?;
+            let decompressed = decompress_exact(&self.slice[start..start + size as usize], original_size as usize)?;
             return Ok(Some(decompressed))
         }
 
+        let mut decompressed = Vec::with_capacity(original_size as usize);
         let mut decompressed_buf = Vec::with_capacity(DEFAULT_CHUNK_SIZE);
 
         for chunk_size in chunk_data.chunks_exact(4).step_by(3).map(|e| u32::from_le_bytes(e.try_into().unwrap())) {
