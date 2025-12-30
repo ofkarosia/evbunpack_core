@@ -413,7 +413,8 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             self.analyze_pe()?;
         debug!("Exception patch: {:?}", exception_patch);
         debug!("TLS rva: {:?}", tls_rva);
-        debug!("Enigma mask: {:?}, physical end: 0x{:x}, max enigma end: 0x{:x}", enigma_mask, final_physical_end, max_enigma_end);
+        debug!("Enigma mask: {:b}", enigma_mask.0);
+        debug!("physical end: 0x{:x}, max enigma end: 0x{:x}", final_physical_end, max_enigma_end);
 
         let overlay_size = self.slice.len() - max_enigma_end;
         debug!("Overlay size: {}", overlay_size);
