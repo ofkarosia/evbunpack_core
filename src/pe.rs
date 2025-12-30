@@ -306,7 +306,7 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
         let exception_start = pe.rva_to_file_offset(exception_dir.VirtualAddress)?;
         let exception_data =
             &self.slice[exception_start..exception_start + exception_dir.Size as usize];
-        debug!("Exception start: {:x}", exception_start);
+        debug!("Exception start: 0x{:x}", exception_start);
 
         let section_headers = pe.section_headers();
         let valid_count = exception_data
@@ -413,7 +413,7 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             self.analyze_pe()?;
         debug!("Exception patch: {:?}", exception_patch);
         debug!("TLS rva: {:?}", tls_rva);
-        debug!("Enigma mask: {:?}, physical end: {:x}, max enigma end: {:x}", enigma_mask, final_physical_end, max_enigma_end);
+        debug!("Enigma mask: {:?}, physical end: 0x{:x}, max enigma end: 0x{:x}", enigma_mask, final_physical_end, max_enigma_end);
 
         let overlay_size = self.slice.len() - max_enigma_end;
         debug!("Overlay size: {}", overlay_size);
@@ -442,8 +442,8 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             ..
         } = self.header;
 
-        debug!("Import addr: {:x}, size: {}", import_address, import_size);
-        debug!("Reloc addr: {:x}, size: {}", reloc_address, reloc_size);
+        debug!("Import addr: 0x{:x}, size: {}", import_address, import_size);
+        debug!("Reloc addr: 0x{:x}, size: {}", reloc_address, reloc_size);
 
         let (_, mut nt_headers, data_directories, section_headers) =
             get_headers_mut(self.slice, self.is_x64);

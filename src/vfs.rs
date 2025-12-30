@@ -233,7 +233,7 @@ impl<'r> Unpacker<'r> {
 
     fn build_entries(&mut self) -> Result<()> {
         let magic_pos = self.find_magic()?;
-        debug!("Found magic at: {:x}", magic_pos);
+        debug!("Found magic at: 0x{:x}", magic_pos);
         let main_header_pos = magic_pos + EVB_PACK_HEADER_SIZE;
         self.reader.set_position(main_header_pos as u64);
 
@@ -290,7 +290,7 @@ impl<'r> Unpacker<'r> {
         let offset = file_node.offset as usize;
         let size = file_node.stored_size as usize;
 
-        debug!("File: {}, offset: {:x}, size: {}", node.name, offset, size);
+        debug!("File: {}, offset: 0x{:x}, size: {}", node.name, offset, size);
 
         Some(&self.slice[offset..offset + size])
     }
