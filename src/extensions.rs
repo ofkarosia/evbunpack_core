@@ -1,5 +1,5 @@
 use std::io;
-use pelite::{PeFile, image::IMAGE_DATA_DIRECTORY, pe::Pe, pe32::Pe as Pe32};
+use pelite::{PeFile, image::IMAGE_DATA_DIRECTORY, pe64::Pe, pe32::Pe as Pe32};
 
 pub(crate) trait PeFileExt {
     fn rva_to_file_offset(&self, rva: u32) -> pelite::Result<usize>;
