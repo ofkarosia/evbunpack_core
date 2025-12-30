@@ -11,6 +11,7 @@ pelite = { version = "0.10.0", features = ["unstable"] }
 aplib = { git = "https://github.com/ofkarosia/aplib", optional = true }
 thiserror = "2.0.17"
 cfg-if = "1.0.4"
+log = "0.4.29"
 
 [features]
 default = ["aplib"]

@@ -1,4 +1,5 @@
 use deku::{DekuContainerRead, DekuError, DekuRead};
+use log::debug;
 use pelite::{
     PeFile,
     image::{
@@ -118,24 +119,29 @@ impl<'r> RestorePeContext<'r, EmptyHeader> {
 
         for variant in candidates {
             let Ok(enigma_header) = self.parse_enigma_header(pe, variant) else {
+                debug!("Skip variant (header parse): {:?}", variant);
                 continue;
             };
             let Ok(import_descriptor) =
                 pe.derva::<IMAGE_IMPORT_DESCRIPTOR>(enigma_header.import_address)
             else {
+                debug!("Skip variant (import desc): {:?}", variant);
                 continue;
             };
             let Ok(name) = pe.derva_c_str(import_descriptor.Name) else {
+                debug!("Skip variant (import name): {:?}", variant);
                 continue;
             };
 
             let len = name.len();
             if len <= 4 {
+                debug!("Skip variant (name len): {:?}", variant);
                 continue;
             }
 
             let suffix = &name[len - 4..];
             if suffix.eq_ignore_ascii_case(b".dll") {
+                debug!("Found valid variant: {:?}", variant);
                 return Some(enigma_header);
             }
         }
@@ -145,8 +151,10 @@ impl<'r> RestorePeContext<'r, EmptyHeader> {
 
     fn get_pe(&self) -> Result<(PeFile<'_>, bool)> {
         let pe = PeFile::from_bytes(self.slice)?;
+        let is_x64 = pe.is_x64();
+        debug!("Executable arch: {}", if is_x64 { "x64" } else { "x86" });
 
-        Ok((pe, pe.is_x64()))
+        Ok((pe, is_x64))
     }
 
     pub fn with_variant(self, variant: PeVariant) -> Result<RestorePeContext<'r, Enigma1Header>> {
@@ -275,6 +283,7 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
                 continue;
             };
 
+            debug!("Found section to place new exception data: {:?}", header.Name);
             return Some((header.VirtualAddress + pos as u32, index));
         }
 
@@ -287,15 +296,17 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
         enigma_mask: EnigmaMask,
     ) -> Result<Option<ExceptionPatch>> {
         let stride: usize = if self.is_x64 { 12 } else { 20 };
-        let exception_dir = &pe.data_directory()[3];
+        let exception_dir = &pe.data_directory()[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
 
         if exception_dir.VirtualAddress == 0 || exception_dir.Size < stride as u32 {
+            debug!("No valid exception directory found");
             return Ok(None);
         }
 
         let exception_start = pe.rva_to_file_offset(exception_dir.VirtualAddress)?;
         let exception_data =
             &self.slice[exception_start..exception_start + exception_dir.Size as usize];
+        debug!("Exception start: {:x}", exception_start);
 
         let section_headers = pe.section_headers();
         let valid_count = exception_data
@@ -315,10 +326,12 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
                 }
             })
             .unwrap_or(exception_dir.Size as usize / stride);
+        debug!("Valid exception count: {}", valid_count);
 
         let new_exception_size = valid_count * stride;
 
         if new_exception_size == 0 {
+            debug!("No exception to preserve");
             return Ok(Some(ExceptionPatch {
                 exception_start,
                 new_exception_size,
@@ -355,6 +368,7 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             let Some(pos) = raw_data.windows(12).position(|w| w == tls_pattern) else {
                 continue;
             };
+            debug!("Found tls data in section: {:?}", section.Name);
             return Some(section.VirtualAddress + pos as u32);
         }
 
@@ -397,8 +411,12 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
     pub fn restore_pe(self) -> Result<usize> {
         let PeAnalysis { exception_patch, tls_rva, enigma_mask, final_physical_end, max_enigma_end } =
             self.analyze_pe()?;
+        debug!("Exception patch: {:?}", exception_patch);
+        debug!("TLS rva: {:?}", tls_rva);
+        debug!("Enigma mask: {:?}, physical end: {:x}, max enigma end: {:x}", enigma_mask, final_physical_end, max_enigma_end);
 
         let overlay_size = self.slice.len() - max_enigma_end;
+        debug!("Overlay size: {}", overlay_size);
 
         if overlay_size > 0 {
             self.slice.copy_within(max_enigma_end.., final_physical_end);
@@ -423,6 +441,9 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             reloc_size,
             ..
         } = self.header;
+
+        debug!("Import addr: {:x}, size: {}", import_address, import_size);
+        debug!("Reloc addr: {:x}, size: {}", reloc_address, reloc_size);
 
         let (_, mut nt_headers, data_directories, section_headers) =
             get_headers_mut(self.slice, self.is_x64);
@@ -472,6 +493,8 @@ impl<'r> RestorePeContext<'r, Enigma1Header> {
             header.VirtualAddress = 0;
             removed += 1;
         }
+
+        debug!("Removed sections: {}, last section index: {}", removed, last_section_index);
 
         let last_section_header = &section_headers[last_section_index];
         nt_headers.file_header_mut().NumberOfSections -= removed;

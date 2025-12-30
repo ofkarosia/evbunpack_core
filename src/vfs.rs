@@ -2,6 +2,7 @@ use cfg_if::cfg_if;
 use deku::{DekuContainerRead, DekuError};
 use encoding_rs::UTF_16LE;
 use indexmap::IndexMap;
+use log::debug;
 use thiserror::Error;
 use std::{io::{self, Cursor, Seek}, path::{Path, PathBuf}, result};
 
@@ -187,11 +188,12 @@ impl<'r> Unpacker<'r> {
     }
 
     fn get_pre_analysis(&self, main_header_pos: usize) -> Result<VfsPreAnalysis> {
-        // Actually we can get the pos from the reader but that requires an extra conversion
         let (_, main_node) = VfsHeader::from_bytes((&self.slice[main_header_pos..main_header_pos + VFS_HEADER_SIZE], 0))?;
         if main_node.objects_count != 1 {
             return Err(UnpackerError::MultipleRootFolders);
         }
+
+        debug!("Main node size: {}, objects_count: {}", main_node.size, main_node.objects_count);
 
         // NOTE: There is an edge case when the actual type is modern and the first file is a UTF-16LE encoded text
         // Not going to handle it for now
@@ -200,6 +202,7 @@ impl<'r> Unpacker<'r> {
         let legacy_slice = &self.slice[legacy_start..legacy_start + DEFAULT_FOLDER_LEN];
 
         if legacy_slice == DEFAULT_FOLDER_BYTES {
+            debug!("Found legacy VFS");
             return Ok(VfsPreAnalysis {
                 is_legacy: true,
                 data_abs_offset: 0,
@@ -213,6 +216,7 @@ impl<'r> Unpacker<'r> {
         let modern_slice = &self.slice[modern_start..modern_start + DEFAULT_FOLDER_LEN];
 
         if modern_slice == DEFAULT_FOLDER_BYTES {
+            debug!("Found modern VFS");
             return Ok(VfsPreAnalysis {
                 is_legacy: false,
                 data_abs_offset,
@@ -229,10 +233,12 @@ impl<'r> Unpacker<'r> {
 
     fn build_entries(&mut self) -> Result<()> {
         let magic_pos = self.find_magic()?;
+        debug!("Found magic at: {:x}", magic_pos);
         let main_header_pos = magic_pos + EVB_PACK_HEADER_SIZE;
         self.reader.set_position(main_header_pos as u64);
 
         let VfsPreAnalysis { is_legacy, data_abs_offset, next_header_offset } = self.get_pre_analysis(main_header_pos)?;
+        debug!("Next header offset: {}", next_header_offset);
 
         self.data_abs_offset = data_abs_offset;
         self.reader.seek_relative(next_header_offset as i64)?;
@@ -283,6 +289,8 @@ impl<'r> Unpacker<'r> {
         let file_node = node.file.as_ref().unwrap();
         let offset = file_node.offset as usize;
         let size = file_node.stored_size as usize;
+
+        debug!("File: {}, offset: {:x}, size: {}", node.name, offset, size);
 
         Some(&self.slice[offset..offset + size])
     }
