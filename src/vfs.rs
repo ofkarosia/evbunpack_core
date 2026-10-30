@@ -125,10 +125,24 @@ impl<'r> Unpacker<'r> {
     }
 
     fn find_magic(&self) -> Result<usize> {
-        self.slice
-            .windows(4)
-            .position(|w| w == EVB_MAGIC)
-            .ok_or(UnpackerError::MagicNotFound)
+        // The executable may contain embedded data that coincidentally matches the
+        // EVB magic. Validate each candidate by probing its VFS header instead of
+        // blindly trusting the first match.
+        let mut last_error = None;
+
+        for (pos, window) in self.slice.windows(EVB_MAGIC.len()).enumerate() {
+            if window != EVB_MAGIC {
+                continue;
+            }
+
+            let main_header_pos = pos + EVB_PACK_HEADER_SIZE;
+            match self.get_pre_analysis(main_header_pos) {
+                Ok(_) => return Ok(pos),
+                Err(error) => last_error = Some(error)
+            }
+        }
+
+        Err(last_error.unwrap_or(UnpackerError::MagicNotFound))
     }
 
     fn process_file_name(&self, name: String) -> Result<String> {
@@ -187,8 +201,13 @@ impl<'r> Unpacker<'r> {
         Ok(())
     }
 
+    fn slice_at(&self, start: usize, len: usize) -> Option<&'r [u8]> {
+        self.slice.get(start..start.checked_add(len)?)
+    }
+
     fn get_pre_analysis(&self, main_header_pos: usize) -> Result<VfsPreAnalysis> {
-        let (_, main_node) = VfsHeader::from_bytes((&self.slice[main_header_pos..main_header_pos + VFS_HEADER_SIZE], 0))?;
+        let header = self.slice_at(main_header_pos, VFS_HEADER_SIZE).ok_or(UnpackerError::InvalidVfs)?;
+        let (_, main_node) = VfsHeader::from_bytes((header, 0))?;
         if main_node.objects_count != 1 {
             return Err(UnpackerError::MultipleRootFolders);
         }
@@ -199,9 +218,8 @@ impl<'r> Unpacker<'r> {
         // Not going to handle it for now
         let next_header_offset = main_node.size as usize + VFS_PADDING;
         let legacy_start = main_header_pos + next_header_offset + VFS_HEADER_SIZE;
-        let legacy_slice = &self.slice[legacy_start..legacy_start + DEFAULT_FOLDER_LEN];
 
-        if legacy_slice == DEFAULT_FOLDER_BYTES {
+        if self.slice_at(legacy_start, DEFAULT_FOLDER_LEN) == Some(DEFAULT_FOLDER_BYTES.as_slice()) {
             debug!("Found legacy VFS");
             return Ok(VfsPreAnalysis {
                 is_legacy: true,
@@ -213,9 +231,8 @@ impl<'r> Unpacker<'r> {
         let data_abs_offset = (main_header_pos + next_header_offset) as u64;
         let next_header_offset = VFS_HEADER_SIZE - 1;
         let modern_start = main_header_pos + next_header_offset + VFS_HEADER_SIZE;
-        let modern_slice = &self.slice[modern_start..modern_start + DEFAULT_FOLDER_LEN];
 
-        if modern_slice == DEFAULT_FOLDER_BYTES {
+        if self.slice_at(modern_start, DEFAULT_FOLDER_LEN) == Some(DEFAULT_FOLDER_BYTES.as_slice()) {
             debug!("Found modern VFS");
             return Ok(VfsPreAnalysis {
                 is_legacy: false,
@@ -224,7 +241,8 @@ impl<'r> Unpacker<'r> {
             });
         }
 
-        if &self.slice[legacy_start..legacy_start + 2] == b"%\0" || &self.slice[modern_start..modern_start + 2] == b"%\0" {
+        let is_unsupported_root = |start: usize| self.slice_at(start, 2) == Some(b"%\0".as_slice());
+        if is_unsupported_root(legacy_start) || is_unsupported_root(modern_start) {
             return Err(UnpackerError::RootFolderNotSupported)
         }
 
