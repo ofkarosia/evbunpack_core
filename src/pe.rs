@@ -8,7 +8,7 @@ use pelite::{
         IMAGE_FILE_HEADER, IMAGE_IMPORT_DESCRIPTOR, IMAGE_NT_HEADERS32, IMAGE_NT_HEADERS64,
         IMAGE_SECTION_HEADER, IMAGE_TLS_DIRECTORY32, IMAGE_TLS_DIRECTORY64,
     },
-    pe::Rva,
+    pe64::Rva,
 };
 use thiserror::Error;
 use std::{cmp::{max, min}, result};
